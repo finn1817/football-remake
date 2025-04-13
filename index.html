@@ -1,1218 +1,299 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dan's Football</title>
-    <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            touch-action: none;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            -khtml-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            background-color: #111;
-            font-family: 'Courier New', monospace;
-        }
-        
-        #gameCanvas {
-            display: block;
-            margin: 0 auto;
-            background-color: #000;
-            touch-action: none;
-        }
-        
-        #startScreen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            z-index: 10;
-        }
-        
-        h1 {
-            font-size: 2.5em;
-            margin-bottom: 20px;
-            color: #fff;
-            text-shadow: 0 0 10px #0f0;
-        }
-        
-        .btn {
-            background-color: #006400;
-            color: white;
-            padding: 10px 20px;
-            margin: 10px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1.2em;
-            min-width: 200px;
-            text-align: center;
-        }
-        
-        .btn:hover {
-            background-color: #008800;
-        }
-        
-        #pauseScreen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: none;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: white;
-            z-index: 10;
-        }
-        
-        #pauseBtn {
-            position: absolute;
-            bottom: 10px;
-            left: 10px;
-            background-color: rgba(0, 0, 0, 0.5);
-            color: white;
-            border: 1px solid white;
-            border-radius: 5px;
-            padding: 5px 10px;
-            z-index: 5;
-            cursor: pointer;
-        }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Dan's Football</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #3caa3c;
+      overflow: hidden;
+      font-family: sans-serif;
+      touch-action: none;
+      user-select: none;
+    }
+
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background: repeating-linear-gradient(
+        #4CAF50, #4CAF50 10px,
+        #45a049 10px, #45a049 20px
+      );
+    }
+
+    #hud {
+      position: absolute;
+      top: 0;
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      padding: 10px;
+      color: white;
+      font-size: 16px;
+    }
+
+    #countdown {
+      position: absolute;
+      top: 40%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 48px;
+      color: white;
+      background: rgba(0,0,0,0.5);
+      padding: 10px 20px;
+      border-radius: 10px;
+      display: none;
+    }
+  </style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-    
-    <div id="startScreen">
-        <h1>Dan's Football</h1>
-        <button class="btn" onclick="startGame(1)">1 Minute Game</button>
-        <button class="btn" onclick="startGame(2)">2 Minute Game</button>
-        <button class="btn" onclick="startGame(3)">3 Minute Game</button>
-        <button class="btn" onclick="startGame(5)">5 Minute Game</button>
-    </div>
-    
-    <div id="pauseScreen">
-        <h1>Game Paused</h1>
-        <button class="btn" onclick="resumeGame()">Resume Game</button>
-        <button class="btn" onclick="restartGame()">Restart Game</button>
-    </div>
-    
-    <button id="pauseBtn" onclick="pauseGame()">Pause</button>
-    
-    <script>
-        // Canvas and context
-        const canvas = document.getElementById('gameCanvas');
-        const ctx = canvas.getContext('2d');
-        
-        // Game state variables
-        let gameRunning = false;
-        let gamePaused = false;
-        let gameTimer = 0;
-        let gameMinutes = 2; // Default game length
-        let score = 0;
-        let round = 1;
-        let down = 1;
-        let hitsLeft = 3;
-        let yardsToGo = 10;
-        let lineOfScrimmage = 0;
-        let firstDownLine = 0;
-        
-        // Play state variables
-        let playActive = false;
-        let prePlayCountdown = 8; // 8 seconds pre-play countdown
-        let countdownPaused = false;
-        let playResetTimer = 0;
-        let playMessage = "";
-        let playMessageTimer = 0;
-        
-        // Field dimensions
-        const fieldPadding = 20;
-        let fieldWidth = 0;
-        let fieldHeight = 0;
-        let yardLineSpacing = 0;
-        
-        // Players
-        const offensePlayers = [];
-        const defensePlayers = [];
-        let ballCarrier = null;
-        let quarterback = null;
-        let selectedPlayer = null;
-        let football = null;
-        
-        // Last timestamp for animation
-        let lastTimestamp = 0;
-        
-        // Mobile control
-        let touchX = 0;
-        let touchY = 0;
-        let isTouching = false;
-        
-        // Initialize canvas size
-        function resizeCanvas() {
-            // Set canvas size to window size with a bit of padding
-            const windowWidth = window.innerWidth;
-            const windowHeight = window.innerHeight;
-            
-            // Calculate field dimensions (portrait orientation game)
-            if (windowWidth < windowHeight) {
-                canvas.width = windowWidth;
-                canvas.height = Math.min(windowHeight, windowWidth * 2);
-            } else {
-                canvas.height = windowHeight;
-                canvas.width = Math.min(windowWidth, windowHeight / 2);
-            }
-            
-            fieldWidth = canvas.width - (fieldPadding * 2);
-            fieldHeight = canvas.height - (fieldPadding * 2);
-            yardLineSpacing = fieldHeight / 12; // 10 yard lines + 2 end zones
-            
-            // If game is running, reset player positions
-            if (gameRunning && !playActive) {
-                setupNewPlay();
-            }
+  <canvas id="gameCanvas" width="512" height="854"></canvas>
+  <div id="hud">
+    <div id="round">Round: 1</div>
+    <div id="score">Score: 0</div>
+    <div id="down">Down: 1</div>
+    <div id="hits">Hits Left: 3</div>
+  </div>
+  <div id="countdown">8</div>
+  
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const countdownEl = document.getElementById('countdown');
+    const roundEl = document.getElementById('round');
+    const scoreEl = document.getElementById('score');
+    const downEl = document.getElementById('down');
+    const hitsEl = document.getElementById('hits');
+
+    const fieldWidth = canvas.width;
+    const fieldHeight = canvas.height;
+    const playerSize = 32;
+    const routeSpeed = 2;
+    const ballSpeed = 3;
+
+    const players = [];
+    let ball = null;
+    let ballCarrier = null;
+    let playActive = false;
+    let draggingPlayer = null;
+    let drawingRoute = [];
+    let countdown = 8;
+    let down = 1;
+    let hitsLeft = 3;
+    let score = 0;
+    let round = 1;
+    let ballInAir = false;
+    let ballTarget = null;
+
+    function createPlayer(x, y, type, id) {
+      return { x, y, type, id, route: [], routeIndex: 0, active: false };
+    }
+
+    function initPlayers() {
+      players.length = 0;
+      for (let i = 0; i < 9; i++) {
+        let p = createPlayer(30 + i * 45, fieldHeight - 60, 'x', 'x' + i);
+        players.push(p);
+        if (i === 4) ballCarrier = p;
+      }
+      for (let i = 0; i < 8; i++) {
+        players.push(createPlayer(40 + i * 50, fieldHeight - 110, 'o', 'o' + i));
+      }
+      ball = { x: ballCarrier.x, y: ballCarrier.y, visible: false };
+    }
+
+    function drawPlayers() {
+      for (let p of players) {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, playerSize / 2, 0, Math.PI * 2);
+        ctx.fillStyle = p.type === 'x' ? 'black' : 'white';
+        ctx.fill();
+        ctx.strokeStyle = p.type === 'x' ? 'white' : 'black';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.fillStyle = p.type === 'x' ? 'white' : 'black';
+        ctx.font = '20px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillText(p.type.toUpperCase(), p.x, p.y + 7);
+      }
+      if (ball.visible) {
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = 'brown';
+        ctx.fill();
+      }
+    }
+
+    function drawRoutes() {
+      ctx.setLineDash([5, 5]);
+      ctx.strokeStyle = 'black';
+      for (let p of players) {
+        if (p.route.length > 1) {
+          ctx.beginPath();
+          ctx.moveTo(p.route[0].x, p.route[0].y);
+          for (let pt of p.route) {
+            ctx.lineTo(pt.x, pt.y);
+          }
+          ctx.stroke();
         }
-        
-        // Player class
-        class Player {
-            constructor(x, y, isOffense, isQB = false) {
-                this.x = x;
-                this.y = y;
-                this.targetX = x;
-                this.targetY = y;
-                this.isOffense = isOffense;
-                this.isQB = isQB;
-                this.hasBall = isQB;
-                this.radius = 15;
-                this.speed = isOffense ? 0.15 : 0.1; // Offensive players slightly faster
-                this.route = [];
-                this.routeIndex = 0;
-                this.blocked = false;
-                this.blockedTimer = 0;
-                this.tackled = false;
-            }
-            
-            draw() {
-                // Draw player
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-                
-                // Fill based on offense/defense
-                if (this.isOffense) {
-                    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-                    ctx.fill();
-                    
-                    // Draw X
-                    ctx.beginPath();
-                    ctx.moveTo(this.x - 7, this.y - 7);
-                    ctx.lineTo(this.x + 7, this.y + 7);
-                    ctx.moveTo(this.x + 7, this.y - 7);
-                    ctx.lineTo(this.x - 7, this.y + 7);
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                } else {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0)';
-                    ctx.stroke();
-                }
-                
-                // Highlight QB or ball carrier
-                if (playActive && (this.hasBall || this.isQB)) {
-                    // Gold highlight for ball carrier
-                    ctx.beginPath();
-                    ctx.arc(this.x, this.y, this.radius + 3, 0, Math.PI * 2);
-                    ctx.strokeStyle = '#FFD700';
-                    ctx.lineWidth = 3;
-                    ctx.stroke();
-                }
-                
-                // Draw planned route during pre-play
-                if (!playActive && this.isOffense && this.route.length > 0) {
-                    ctx.beginPath();
-                    ctx.moveTo(this.x, this.y);
-                    
-                    for (const point of this.route) {
-                        ctx.lineTo(point.x, point.y);
-                    }
-                    
-                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-                    ctx.setLineDash([5, 5]);
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                    
-                    // Draw target marker
-                    const lastPoint = this.route[this.route.length - 1];
-                    ctx.beginPath();
-                    ctx.arc(lastPoint.x, lastPoint.y, 5, 0, Math.PI * 2);
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-                    ctx.fill();
-                }
-            }
-            
-            update(deltaTime) {
-                if (this.blocked) {
-                    this.blockedTimer -= deltaTime;
-                    if (this.blockedTimer <= 0) {
-                        this.blocked = false;
-                    }
-                    return;
-                }
-                
-                if (this.tackled) {
-                    return;
-                }
-                
-                // Move player toward target
-                if (playActive) {
-                    // Ball carrier is controlled manually - skip movement
-                    if (this.hasBall) {
-                        return;
-                    }
-                    
-                    // Defense chases ball carrier
-                    if (!this.isOffense && ballCarrier) {
-                        this.targetX = ballCarrier.x;
-                        this.targetY = ballCarrier.y;
-                    }
-                    
-                    // Follow route if offense
-                    if (this.isOffense && this.route.length > 0 && this.routeIndex < this.route.length) {
-                        this.targetX = this.route[this.routeIndex].x;
-                        this.targetY = this.route[this.routeIndex].y;
-                        
-                        const dx = this.targetX - this.x;
-                        const dy = this.targetY - this.y;
-                        const distance = Math.sqrt(dx * dx + dy * dy);
-                        
-                        if (distance < 5) {
-                            this.routeIndex++;
-                        }
-                    }
-                }
-                
-                // Move toward target
-                const dx = this.targetX - this.x;
-                const dy = this.targetY - this.y;
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance > 1) {
-                    const moveX = dx / distance * this.speed * deltaTime;
-                    const moveY = dy / distance * this.speed * deltaTime;
-                    this.x += moveX;
-                    this.y += moveY;
-                    
-                    // Check for collisions with other players
-                    this.handleCollisions();
-                }
-            }
-            
-            handleCollisions() {
-                const players = [...offensePlayers, ...defensePlayers];
-                
-                for (const otherPlayer of players) {
-                    if (otherPlayer === this) continue;
-                    
-                    const dx = this.x - otherPlayer.x;
-                    const dy = this.y - otherPlayer.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (distance < this.radius + otherPlayer.radius) {
-                        // Collision detected
-                        
-                        // Calculate collision response
-                        const angle = Math.atan2(dy, dx);
-                        const pushDistance = (this.radius + otherPlayer.radius) - distance;
-                        
-                        // Offensive player can block defensive player
-                        if (playActive && this.isOffense && !otherPlayer.isOffense && !this.hasBall) {
-                            // Block defender
-                            otherPlayer.blocked = true;
-                            otherPlayer.blockedTimer = 500; // Block for 500ms
-                        }
-                        
-                        // Ball carrier tackled by defense
-                        if (playActive && this.hasBall && !otherPlayer.isOffense) {
-                            tackle();
-                        }
-                        
-                        // Push players apart so they don't overlap
-                        if (!this.blocked && !otherPlayer.blocked) {
-                            this.x += Math.cos(angle) * (pushDistance / 2);
-                            this.y += Math.sin(angle) * (pushDistance / 2);
-                            otherPlayer.x -= Math.cos(angle) * (pushDistance / 2);
-                            otherPlayer.y -= Math.sin(angle) * (pushDistance / 2);
-                        }
-                    }
-                }
-            }
-            
-            setRoute(x, y) {
-                if (this.route.length === 0) {
-                    // First point in route
-                    this.route.push({x, y});
-                } else {
-                    // Replace last point
-                    this.route[this.route.length - 1] = {x, y};
-                }
-            }
-            
-            clearRoute() {
-                this.route = [];
-                this.routeIndex = 0;
-            }
+      }
+      ctx.setLineDash([]);
+    }
+
+    function updateRoutes() {
+      for (let p of players) {
+        if (p.route.length > 0 && p.routeIndex < p.route.length) {
+          const target = p.route[p.routeIndex];
+          const dx = target.x - p.x;
+          const dy = target.y - p.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < routeSpeed) {
+            p.x = target.x;
+            p.y = target.y;
+            p.routeIndex++;
+          } else {
+            p.x += (dx / dist) * routeSpeed;
+            p.y += (dy / dist) * routeSpeed;
+          }
         }
-        
-        // Football class
-        class Football {
-            constructor() {
-                this.x = 0;
-                this.y = 0;
-                this.visible = false;
-                this.targetX = 0;
-                this.targetY = 0;
-                this.angle = 0;
-                this.speed = 0.5;
-                this.height = 0;
-                this.maxHeight = 100;
-                this.thrown = false;
-                this.targetPlayer = null;
-                this.isLob = false;
-            }
-            
-            draw() {
-                if (!this.visible) return;
-                
-                // Draw football
-                ctx.beginPath();
-                ctx.save();
-                ctx.translate(this.x, this.y - this.height);
-                ctx.rotate(this.angle);
-                ctx.ellipse(0, 0, 5, 8, 0, 0, Math.PI * 2);
-                ctx.fillStyle = '#8B4513';
-                ctx.fill();
-                ctx.strokeStyle = '#000';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-                
-                // Draw laces
-                ctx.beginPath();
-                ctx.moveTo(-2, 0);
-                ctx.lineTo(2, 0);
-                ctx.strokeStyle = '#fff';
-                ctx.lineWidth = 1;
-                ctx.stroke();
-                ctx.restore();
-            }
-            
-            update(deltaTime) {
-                if (!this.visible || !this.thrown) return;
-                
-                // Calculate angle and update ball rotation
-                const dx = this.targetX - this.x;
-                const dy = this.targetY - this.y;
-                this.angle = Math.atan2(dy, dx) + Math.PI / 2;
-                
-                // Move toward target
-                const distance = Math.sqrt(dx * dx + dy * dy);
-                
-                if (distance > 5) {
-                    const progress = 1 - (distance / this.initialDistance);
-                    
-                    // Update height based on lob or bullet pass
-                    if (this.isLob) {
-                        // Parabolic arc for lob pass
-                        this.height = this.maxHeight * Math.sin(progress * Math.PI);
-                    } else {
-                        // Lower arc for bullet pass
-                        this.height = this.maxHeight * 0.3 * Math.sin(progress * Math.PI);
-                    }
-                    
-                    const moveX = dx / distance * this.speed * deltaTime;
-                    const moveY = dy / distance * this.speed * deltaTime;
-                    this.x += moveX;
-                    this.y += moveY;
-                    
-                    // Check for interception
-                    this.checkForInterception();
-                } else {
-                    // Ball reached target
-                    if (this.targetPlayer) {
-                        this.visible = false;
-                        this.thrown = false;
-                        
-                        // Transfer ball to receiver
-                        if (quarterback) {
-                            quarterback.hasBall = false;
-                        }
-                        
-                        this.targetPlayer.hasBall = true;
-                        ballCarrier = this.targetPlayer;
-                    }
-                }
-            }
-            
-            throw(targetPlayer, isLob) {
-                if (!quarterback || !playActive) return;
-                
-                this.x = quarterback.x;
-                this.y = quarterback.y;
-                this.targetX = targetPlayer.x;
-                this.targetY = targetPlayer.y;
-                this.targetPlayer = targetPlayer;
-                this.visible = true;
-                this.thrown = true;
-                this.isLob = isLob;
-                this.height = 0;
-                this.initialDistance = Math.sqrt(
-                    Math.pow(this.targetX - this.x, 2) + 
-                    Math.pow(this.targetY - this.y, 2)
-                );
-                
-                // Set max height based on distance
-                this.maxHeight = Math.min(100, this.initialDistance * 0.5);
-            }
-            
-            checkForInterception() {
-                // Check if any defender is in the path
-                for (const defender of defensePlayers) {
-                    const dx = defender.x - this.x;
-                    const dy = defender.y - this.y;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    // Defender can intercept
-                    if (distance < defender.radius * 1.5) {
-                        // Bullet pass gets intercepted more easily
-                        if (!this.isLob || this.height < defender.radius) {
-                            this.intercept(defender);
-                            return;
-                        }
-                    }
-                }
-            }
-            
-            intercept(defender) {
-                this.visible = false;
-                this.thrown = false;
-                
-                // Transfer ball to defender
-                if (quarterback) {
-                    quarterback.hasBall = false;
-                }
-                
-                defender.hasBall = true;
-                ballCarrier = defender;
-                
-                // Show interception message
-                playMessage = "Interception!";
-                playMessageTimer = 2000;
-                
-                // Turnover - change of possession
-                setTimeout(() => {
-                    endPlay(true);
-                }, 1500);
-            }
+      }
+    }
+
+    function updateBall() {
+      if (ballInAir && ballTarget) {
+        const dx = ballTarget.x - ball.x;
+        const dy = ballTarget.y - ball.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < ballSpeed) {
+          ball.x = ballTarget.x;
+          ball.y = ballTarget.y;
+          ballInAir = false;
+          ballCarrier = ballTarget;
+          ball.visible = false;
+        } else {
+          ball.x += (dx / dist) * ballSpeed;
+          ball.y += (dy / dist) * ballSpeed;
         }
-        
-        // Start game with selected time
-        function startGame(minutes) {
-            gameRunning = true;
-            gamePaused = false;
-            gameMinutes = minutes;
-            gameTimer = minutes * 60 * 1000; // Convert to milliseconds
-            score = 0;
-            round = 1;
-            down = 1;
-            hitsLeft = 3;
-            yardsToGo = 10;
-            lineOfScrimmage = canvas.height / 2;
-            firstDownLine = lineOfScrimmage - yardLineSpacing;
-            
-            document.getElementById('startScreen').style.display = 'none';
-            document.getElementById('pauseBtn').style.display = 'block';
-            
-            // Initialize players and ball
-            initGame();
-            
-            // Start animation loop
-            lastTimestamp = performance.now();
-            requestAnimationFrame(gameLoop);
+      } else {
+        if (ballCarrier) {
+          ball.x = ballCarrier.x;
+          ball.y = ballCarrier.y;
         }
-        
-        function pauseGame() {
-            gamePaused = true;
-            document.getElementById('pauseScreen').style.display = 'flex';
+      }
+    }
+
+    function updateDefenseAI() {
+      for (let p of players.filter(p => p.type === 'o')) {
+        const dx = ball.x - p.x;
+        const dy = ball.y - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > 2) {
+          p.x += (dx / dist);
+          p.y += (dy / dist);
         }
-        
-        function resumeGame() {
-            gamePaused = false;
-            document.getElementById('pauseScreen').style.display = 'none';
-            lastTimestamp = performance.now();
-            requestAnimationFrame(gameLoop);
+      }
+    }
+
+    function gameLoop() {
+      ctx.clearRect(0, 0, fieldWidth, fieldHeight);
+      drawRoutes();
+      drawPlayers();
+      if (playActive) {
+        updateRoutes();
+        updateBall();
+        updateDefenseAI();
+      }
+      requestAnimationFrame(gameLoop);
+    }
+
+    canvas.addEventListener('click', e => {
+      if (!playActive || ballInAir) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      for (let p of players.filter(p => p.type === 'x')) {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        if (Math.sqrt(dx * dx + dy * dy) < playerSize / 2) {
+          ballInAir = true;
+          ball.visible = true;
+          ballTarget = p;
+          break;
         }
-        
-        function restartGame() {
-            document.getElementById('pauseScreen').style.display = 'none';
-            document.getElementById('startScreen').style.display = 'flex';
-            gameRunning = false;
+      }
+    });
+
+    canvas.addEventListener('mousedown', startDraw);
+    canvas.addEventListener('touchstart', e => startDraw(e.touches[0]));
+
+    function startDraw(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+
+      for (let p of players) {
+        const dx = p.x - x;
+        const dy = p.y - y;
+        if (Math.sqrt(dx * dx + dy * dy) < playerSize / 2) {
+          draggingPlayer = p;
+          drawingRoute = [];
+          drawingRoute.push({ x: p.x, y: p.y });
+          canvas.addEventListener('mousemove', draw);
+          canvas.addEventListener('touchmove', e => draw(e.touches[0]), { passive: false });
+          window.addEventListener('mouseup', endDraw);
+          window.addEventListener('touchend', endDraw);
+          break;
         }
-        
-        // Initialize game objects
-        function initGame() {
-            // Clear existing players
-            offensePlayers.length = 0;
-            defensePlayers.length = 0;
-            
-            // Create football
-            football = new Football();
-            
-            // Setup initial play
-            setupNewPlay();
+      }
+    }
+
+    function draw(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      drawingRoute.push({ x, y });
+    }
+
+    function endDraw() {
+      if (draggingPlayer) {
+        draggingPlayer.route = drawingRoute;
+        draggingPlayer.routeIndex = 0;
+      }
+      draggingPlayer = null;
+      drawingRoute = [];
+      canvas.removeEventListener('mousemove', draw);
+      window.removeEventListener('mouseup', endDraw);
+    }
+
+    function startCountdown() {
+      countdown = 8;
+      countdownEl.style.display = 'block';
+      countdownEl.textContent = countdown;
+      const interval = setInterval(() => {
+        countdown--;
+        countdownEl.textContent = countdown;
+        if (countdown <= 0) {
+          clearInterval(interval);
+          countdownEl.style.display = 'none';
+          startPlay();
         }
-        
-        // Set up a new offensive play
-        function setupNewPlay() {
-            // Clear play state
-            playActive = false;
-            countdownPaused = false;
-            prePlayCountdown = 8;
-            ballCarrier = null;
-            
-            // Reset player positions
-            setupOffensivePlayers();
-            setupDefensivePlayers();
-            
-            // Set quarterback as ball carrier initially
-            quarterback = offensePlayers[0]; // QB is first offensive player
-            quarterback.isQB = true;
-            quarterback.hasBall = true;
-            ballCarrier = quarterback;
-        }
-        
-        function setupOffensivePlayers() {
-            offensePlayers.length = 0;
-            
-            // Create offensive line and QB - 7 total players
-            // QB at center
-            const qb = new Player(
-                fieldPadding + fieldWidth / 2, 
-                lineOfScrimmage + 30, 
-                true, true);
-            offensePlayers.push(qb);
-            
-            // Offensive line - 3 linemen
-            for (let i = 0; i < 3; i++) {
-                const spaceBetween = 40;
-                const startX = fieldPadding + fieldWidth / 2 - spaceBetween;
-                const player = new Player(
-                    startX + (i * spaceBetween), 
-                    lineOfScrimmage, 
-                    true);
-                offensePlayers.push(player);
-            }
-            
-            // Wide receivers - 3 receivers
-            for (let i = 0; i < 3; i++) {
-                const spaceBetween = fieldWidth / 4;
-                const startX = fieldPadding + spaceBetween;
-                const player = new Player(
-                    startX + (i * spaceBetween), 
-                    lineOfScrimmage + 50, 
-                    true);
-                offensePlayers.push(player);
-            }
-            
-            // Set initial routes
-            for (let i = 1; i < offensePlayers.length; i++) {
-                const player = offensePlayers[i];
-                const randomYards = Math.floor(Math.random() * 5) + 3;
-                player.setRoute(player.x, player.y - randomYards * yardLineSpacing / 10);
-            }
-        }
-        
-        function setupDefensivePlayers() {
-            defensePlayers.length = 0;
-            
-            // Create defensive players - 6 total
-            
-            // Defensive line - 3 linemen
-            for (let i = 0; i < 3; i++) {
-                const spaceBetween = 40;
-                const startX = fieldPadding + fieldWidth / 2 - spaceBetween;
-                const player = new Player(
-                    startX + (i * spaceBetween), 
-                    lineOfScrimmage - 10, 
-                    false);
-                defensePlayers.push(player);
-            }
-            
-            // Defensive backs - 3 DBs
-            for (let i = 0; i < 3; i++) {
-                const spaceBetween = fieldWidth / 4;
-                const startX = fieldPadding + spaceBetween;
-                const player = new Player(
-                    startX + (i * spaceBetween), 
-                    lineOfScrimmage - 80, 
-                    false);
-                defensePlayers.push(player);
-            }
-        }
-        
-        // Handle start of play
-        function startPlay() {
-            playActive = true;
-            
-            // Reset route index for all players
-            for (const player of offensePlayers) {
-                player.routeIndex = 0;
-            }
-        }
-        
-        // End the current play
-        function endPlay(isInterception = false) {
-            if (!playActive) return;
-            
-            playActive = false;
-            playResetTimer = 2000; // 2 seconds before next play
-            
-            // Update game state
-            if (isInterception) {
-                // Turnover on interception
-                down = 1;
-                hitsLeft = 3;
-                // Move line of scrimmage to where interception occurred
-                if (ballCarrier) {
-                    lineOfScrimmage = ballCarrier.y;
-                }
-            } else if (isTouchdown()) {
-                // Touchdown scored
-                score += 7;
-                down = 1;
-                hitsLeft = 3;
-                lineOfScrimmage = canvas.height - 150; // Reset to near offensive end zone
-                playMessage = "Touchdown!";
-                playMessageTimer = 2000;
-            } else {
-                // Normal tackle
-                if (ballCarrier) {
-                    // Move line of scrimmage to where ball carrier was tackled
-                    const yardsGained = (lineOfScrimmage - ballCarrier.y) / (yardLineSpacing / 10);
-                    lineOfScrimmage = ballCarrier.y;
-                    yardsToGo -= yardsGained;
-                    
-                    // Check for first down
-                    if (yardsToGo <= 0) {
-                        down = 1;
-                        yardsToGo = 10;
-                        firstDownLine = lineOfScrimmage - yardLineSpacing;
-                        playMessage = "First Down!";
-                        playMessageTimer = 2000;
-                    } else {
-                        down += 1;
-                        if (down > 4) {
-                            // Turnover on downs
-                            down = 1;
-                            yardsToGo = 10;
-                            playMessage = "Turnover on Downs";
-                            playMessageTimer = 2000;
-                        }
-                    }
-                }
-                
-                // Decrement hits left
-                hitsLeft -= 1;
-                if (hitsLeft <= 0) {
-                    round += 1;
-                    hitsLeft = 3;
-                }
-            }
-            
-            // If line of scrimmage is past endzone, reset to near endzone
-            if (lineOfScrimmage < fieldPadding) {
-                lineOfScrimmage = fieldPadding + 20;
-            } else if (lineOfScrimmage > canvas.height - fieldPadding) {
-                lineOfScrimmage = canvas.height - fieldPadding - 20;
-            }
-            
-            // Recalculate first down line
-            firstDownLine = lineOfScrimmage - (yardsToGo * (yardLineSpacing / 10));
-        }
-        
-        // Check if a touchdown has been scored
-        function isTouchdown() {
-            return ballCarrier && ballCarrier.isOffense && ballCarrier.y <= fieldPadding;
-        }
-        
-        // Handle tackle event
-        function tackle() {
-            if (ballCarrier) {
-                ballCarrier.tackled = true;
-                playMessage = "Tackled!";
-                playMessageTimer = 1000;
-                
-                // End play after short delay
-                setTimeout(() => {
-                    endPlay();
-                }, 800);
-            }
-        }
-        
-        // Handle passing the ball
-        function passToReceiver(receiver, isLob) {
-            if (!playActive || !quarterback || !quarterback.hasBall) return;
-            
-            // Check if pass is legal (QB must be behind line of scrimmage)
-            if (quarterback.y < lineOfScrimmage) {
-                playMessage = "Illegal Forward Pass!";
-                playMessageTimer = 1500;
-                return;
-            }
-            
-            // Throw the ball
-            football.throw(receiver, isLob);
-        }
-        
-        // Main game loop
-        function gameLoop(timestamp) {
-            // Calculate delta time in milliseconds
-            const deltaTime = timestamp - lastTimestamp;
-            lastTimestamp = timestamp;
-            
-            // Skip if game is paused
-            if (gamePaused) {
-                return;
-            }
-            
-            // Update game timer
-            if (gameRunning && playActive) {
-                gameTimer -= deltaTime;
-                if (gameTimer <= 0) {
-                    gameTimer = 0;
-                    // Game over - show start screen
-                    gameRunning = false;
-                    document.getElementById('startScreen').style.display = 'flex';
-                    document.getElementById('pauseBtn').style.display = 'none';
-                    return;
-                }
-            }
-            
-            // Update play state
-            if (gameRunning && !playActive) {
-                // Pre-play countdown
-                if (playResetTimer > 0) {
-                    playResetTimer -= deltaTime;
-                    if (playResetTimer <= 0) {
-                        setupNewPlay();
-                    }
-                } else if (!countdownPaused) {
-                    prePlayCountdown -= deltaTime / 1000; // Convert to seconds
-                    if (prePlayCountdown <= 0) {
-                        startPlay();
-                    }
-                }
-            }
-            
-            // Update message timer
-            if (playMessageTimer > 0) {
-                playMessageTimer -= deltaTime;
-            }
-            
-            // Update all players
-            for (const player of offensePlayers) {
-                player.update(deltaTime);
-            }
-            
-            for (const player of defensePlayers) {
-                player.update(deltaTime);
-            }
-            
-            // Update football
-            if (football) {
-                football.update(deltaTime);
-            }
-            
-            // Draw everything
-            drawGame();
-            
-            // Continue animation loop
-            requestAnimationFrame(gameLoop);
-        }
-        
-        // Draw the game state
-        function drawGame() {
-            // Clear canvas
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Draw field
-            drawField();
-            
-            // Draw players
-            for (const player of offensePlayers) {
-                player.draw();
-            }
-            
-            for (const player of defensePlayers) {
-                player.draw();
-            }
-            
-            // Draw football
-            if (football) {
-                football.draw();
-            }
-            
-            // Draw game information
-            drawGameInfo();
-            
-            // Draw pre-play countdown
-            if (gameRunning && !playActive && playResetTimer <= 0) {
-                drawCountdown();
-            }
-            
-            // Draw play message
-            if (playMessageTimer > 0) {
-                drawPlayMessage();
-            }
-        }
-        
-        // Draw the football field
-        function drawField() {
-            // Background
-            ctx.fillStyle = '#4CAF50';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            // Add texture to grass
-            for (let i = 0; i < 2000; i++) {
-                const x = Math.random() * canvas.width;
-                const y = Math.random() * canvas.height;
-                const size = Math.random() * 2 + 1;
-                ctx.fillStyle = Math.random() > 0.5 ? '#43A047' : '#388E3C';
-                ctx.fillRect(x, y, size, size);
-            }
-            
-            // Draw yard lines
-            for (let i = 0; i <= 10; i++) {
-                const y = fieldPadding + i * yardLineSpacing;
-                ctx.beginPath();
-                ctx.moveTo(fieldPadding, y);
-                ctx.lineTo(canvas.width - fieldPadding, y);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
-                ctx.lineWidth = 2;
-                ctx.stroke();
-                
-                // Draw yard markers
-                for (let j = 1; j < 10; j++) {
-                    const x = fieldPadding + j * (fieldWidth / 10);
-                    ctx.beginPath();
-                    ctx.moveTo(x, y - 5);
-                    ctx.lineTo(x, y + 5);
-                    ctx.stroke();
-                }
-            }
-            
-            // Draw endzones
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-            ctx.fillRect(fieldPadding, fieldPadding, fieldWidth, yardLineSpacing);
-            ctx.fillRect(fieldPadding, canvas.height - fieldPadding - yardLineSpacing, fieldWidth, yardLineSpacing);
-            
-            // Draw line of scrimmage
-            if (gameRunning) {
-                ctx.beginPath();
-                ctx.moveTo(fieldPadding, lineOfScrimmage);
-                ctx.lineTo(canvas.width - fieldPadding, lineOfScrimmage);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([10, 5]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-                
-                // Draw first down line
-                ctx.beginPath();
-                ctx.moveTo(fieldPadding, firstDownLine);
-                ctx.lineTo(canvas.width - fieldPadding, firstDownLine);
-                ctx.strokeStyle = 'rgba(255, 255, 0, 0.7)';
-                ctx.lineWidth = 2;
-                ctx.setLineDash([10, 5]);
-                ctx.stroke();
-                ctx.setLineDash([]);
-            }
-        }
-        
-        // Draw game information (score, down, etc.)
-        function drawGameInfo() {
-            const padding = 10;
-            
-            // Set text properties
-            ctx.font = '12px "Courier New", monospace';
-            ctx.fillStyle = '#000';
-            ctx.textBaseline = 'top';
-            
-            // Draw round, down, and score info
-            ctx.fillText(`round: ${round}`, padding, padding);
-            ctx.fillText(`score: ${score}`, canvas.width - 80, padding);
-            
-            // Draw down and hits left at bottom
-            ctx.fillText(`down: ${down}`, padding, canvas.height - 24);
-            ctx.fillText(`hits left: ${hitsLeft}`, canvas.width - 100, canvas.height - 24);
-            
-            // Draw time remaining
-            const minutes = Math.floor(gameTimer / (60 * 1000));
-            const seconds = Math.floor((gameTimer % (60 * 1000)) / 1000);
-            ctx.fillText(`time: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width / 2 - 30, padding);
-            
-            // Draw yards to go
-            if (gameRunning) {
-                ctx.fillText(`${yardsToGo} yards to go`, canvas.width / 2 - 40, canvas.height - 24);
-            }
-        }
-        
-        // Draw the pre-play countdown
-        function drawCountdown() {
-            if (prePlayCountdown <= 0) return;
-            
-            const countdownText = Math.ceil(prePlayCountdown).toString();
-            ctx.font = '48px Arial, sans-serif';
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText(countdownText, canvas.width / 2, canvas.height / 3);
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-        }
-        
-        // Draw play message (tackled, touchdown, etc.)
-        function drawPlayMessage() {
-            if (playMessage) {
-                ctx.font = '24px Arial, sans-serif';
-                ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(playMessage, canvas.width / 2, canvas.height / 2);
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'top';
-            }
-        }
-        
-        // Event listeners
-        canvas.addEventListener('mousedown', handleMouseDown);
-        canvas.addEventListener('mousemove', handleMouseMove);
-        canvas.addEventListener('mouseup', handleMouseUp);
-        
-        // Touch events for mobile
-        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-        canvas.addEventListener('touchend', handleTouchEnd);
-        
-        // Prevent canvas from getting highlighted on touch
-        canvas.addEventListener('touchstart', (e) => e.preventDefault());
-        
-        // Mouse event handlers
-        function handleMouseDown(e) {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            // Pause countdown when setting up play
-            if (gameRunning && !playActive && playResetTimer <= 0) {
-                countdownPaused = true;
-            }
-            
-            // Select player
-            selectPlayerAt(x, y);
-            
-            // Pass to receiver if QB has ball and play is active
-            if (playActive && quarterback && quarterback.hasBall) {
-                // Find closest receiver within range
-                const receiver = findNearestOffensivePlayer(x, y, quarterback);
-                if (receiver) {
-                    // Check if it's a tap (quick pass) or hold (for bullet pass)
-                    passingTarget = {
-                        receiver: receiver,
-                        timestamp: performance.now(),
-                        isLobPass: true
-                    };
-                }
-            }
-        }
-        
-        function handleMouseMove(e) {
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
-            
-            // Move selected player
-            if (selectedPlayer) {
-                if (!playActive) {
-                    // Pre-play: set route
-                    selectedPlayer.setRoute(x, y);
-                } else if (playActive && selectedPlayer.hasBall) {
-                    // During play: move ball carrier
-                    selectedPlayer.targetX = x;
-                    selectedPlayer.targetY = y;
-                }
-            }
-        }
-        
-        function handleMouseUp(e) {
-            if (playActive && passingTarget) {
-                const holdTime = performance.now() - passingTarget.timestamp;
-                // If held longer than 300ms, it's a bullet pass
-                passToReceiver(passingTarget.receiver, holdTime < 300);
-                passingTarget = null;
-            }
-            
-            // If setting up play, release player
-            if (!playActive) {
-                selectedPlayer = null;
-                // Resume countdown
-                countdownPaused = false;
-            }
-        }
-        
-        // Touch event handlers
-        function handleTouchStart(e) {
-            e.preventDefault();
-            const rect = canvas.getBoundingClientRect();
-            const touch = e.touches[0];
-            const x = touch.clientX - rect.left;
-            const y = touch.clientY - rect.top;
-            
-            touchX = x;
-            touchY = y;
-            isTouching = true;
-            
-            // Pause countdown when setting up play
-            if (gameRunning && !playActive && playResetTimer <= 0) {
-                countdownPaused = true;
-            }
-            
-            // Select player
-            selectPlayerAt(x, y);
-            
-            // Pass to receiver if QB has ball and play is active
-            if (playActive && quarterback && quarterback.hasBall) {
-                // Find closest receiver within range
-                const receiver = findNearestOffensivePlayer(x, y, quarterback);
-                if (receiver) {
-                    passingTarget = {receiver: receiver,
-                        timestamp: performance.now(),
-                        isLobPass: true
-                    };
-                }
-            }
-        }
-        
-        function handleTouchMove(e) {
-            e.preventDefault();
-            const rect = canvas.getBoundingClientRect();
-            const touch = e.touches[0];
-            const x = touch.clientX - rect.left;
-            const y = touch.clientY - rect.top;
-            
-            touchX = x;
-            touchY = y;
-            
-            // Move selected player
-            if (selectedPlayer) {
-                if (!playActive) {
-                    // Pre-play: set route
-                    selectedPlayer.setRoute(x, y);
-                } else if (playActive && selectedPlayer.hasBall) {
-                    // During play: move ball carrier
-                    selectedPlayer.targetX = x;
-                    selectedPlayer.targetY = y;
-                }
-            }
-        }
-        
-        function handleTouchEnd(e) {
-            isTouching = false;
-            
-            if (playActive && passingTarget) {
-                const holdTime = performance.now() - passingTarget.timestamp;
-                // If held longer than 300ms, it's a bullet pass
-                passToReceiver(passingTarget.receiver, holdTime < 300);
-                passingTarget = null;
-            }
-            
-            // If setting up play, release player
-            if (!playActive) {
-                selectedPlayer = null;
-                // Resume countdown
-                countdownPaused = false;
-            }
-        }
-        
-        // Helper functions
-        function selectPlayerAt(x, y) {
-            // Check if we're clicking on a player
-            let clickedPlayer = null;
-            let minDistance = 20; // Minimum distance to select
-            
-            // First check offensive players
-            for (const player of offensePlayers) {
-                const distance = Math.sqrt(
-                    Math.pow(player.x - x, 2) + 
-                    Math.pow(player.y - y, 2)
-                );
-                
-                if (distance < minDistance) {
-                    clickedPlayer = player;
-                    minDistance = distance;
-                }
-            }
-            
-            // Only allow selecting offensive players pre-play, or the ball carrier during play
-            if (clickedPlayer && (!playActive || clickedPlayer.hasBall)) {
-                selectedPlayer = clickedPlayer;
-            } else {
-                selectedPlayer = null;
-            }
-        }
-        
-        function findNearestOffensivePlayer(x, y, excludePlayer) {
-            let nearest = null;
-            let minDistance = 100; // Maximum pass distance
-            
-            for (const player of offensePlayers) {
-                if (player === excludePlayer || player.hasBall) continue;
-                
-                const distance = Math.sqrt(
-                    Math.pow(player.x - x, 2) + 
-                    Math.pow(player.y - y, 2)
-                );
-                
-                if (distance < minDistance) {
-                    nearest = player;
-                    minDistance = distance;
-                }
-            }
-            
-            return nearest;
-        }
-        
-        // Initialize the game
-        let passingTarget = null;
-        
-        // Resize the canvas when the window resizes
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-    </script>
+      }, 1000);
+    }
+
+    function startPlay() {
+      for (let p of players) {
+        p.routeIndex = 0;
+      }
+      playActive = true;
+    }
+
+    initPlayers();
+    startCountdown();
+    gameLoop();
+  </script>
 </body>
 </html>
